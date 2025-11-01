@@ -80,3 +80,12 @@ node index.js
 node analyze_code.js [파일경로1] [파일경로2] ...
 # 예시:
 node analyze_code.js index.js index.html analysis_service.js
+
+
+## 스크린샷 
+<img width="813" height="675" alt="스크린샷 2025-11-01 오전 9 10 41" src="https://github.com/user-attachments/assets/42e76f10-6c45-4c2c-81dd-f1b82ce611cd" />
+
+<img width="813" height="881" alt="스크린샷 2025-11-01 오전 9 12 37" src="https://github.com/user-attachments/assets/ae0e1046-e92b-40bb-9802-c4088e155c1f" />
+
+<img width="813" height="622" alt="스크린샷 2025-11-01 오전 9 13 09" src="https://github.com/user-attachments/assets/dd1fee7f-85e5-482d-967f-4918d3ca339b" />
+
