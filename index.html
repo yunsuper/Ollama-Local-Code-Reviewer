@@ -378,7 +378,7 @@
                 if (isAuthError) {
                     displayError("TTS 기능은 **유료 결제** 또는 **활성화된 API 키**를 가진 사용자만 사용 가능합니다. 유효한 키와 결제 활성화를 확인하세요.");
                 } else {
-                    displayError("TTS 오류 발생: " + error.message);
+                    displayError("TTS 기능은 **유료 결제** 또는 **활성화된 API 키**를 가진 사용자만 사용 가능합니다. 유효한 키와 결제 활성화를 확인하세요.");
                 }
                 
                 setLoadingState(false, ttsButton, ttsButtonText, ttsLoadingSpinner, '✨ 피드백 듣기', '음성 중지');
