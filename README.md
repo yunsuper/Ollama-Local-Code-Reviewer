@@ -69,7 +69,8 @@ node index.js
 
 🔗 **URL:** `http://localhost:3000/`
 
-1. 웹 UI의 입력란에 분석하고자 하는 파일의 **상대 경로** 또는 **절대 경로**를 입력합니다. (예: `data/index.html` 또는 `src/main.js`)
+0. 프로젝트 루트에 data폴더 생성후, 수정받고자 하는 프로젝트 파일을 넣습니다. 
+1. 웹 UI의 입력란에 분석하고자 하는 파일의 **상대 경로** 또는 **절대 경로**를 입력합니다. (예: `data/index.html`)
 2. **`코드 분석 요청`** 버튼을 클릭합니다.
 3. 서버가 파일 내용을 읽어 Ollama API에 요청하고, 수십 초 후 한국어로 작성된 코드 리뷰 결과가 화면에 표시됩니다.
 
@@ -77,9 +78,9 @@ node index.js
 
 웹 UI 대신 터미널에서 즉시 분석 결과를 확인하고 싶을 때 사용합니다.
 
-node analyze_code.js [파일경로1] [파일경로2] ...
+```node analyze_code.js [파일경로1] [파일경로2] ...```
 # 예시:
-node analyze_code.js index.js index.html analysis_service.js
+```node analyze_code.js index.js index.html analysis_service.js``` 
 
 
 ## 스크린샷 
