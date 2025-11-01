@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Local Code Reviewer (Web UI)</title>
+    <!-- Tailwind CSS 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary': '#1E3A8A', // Dark Blue
+                        'secondary': '#34D399', // Emerald Green
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Marked.js 로드 (Markdown to HTML 변환용) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /* Markdown 렌더링 스타일 */
+        #result-output pre {
+            background-color: #1f2937; /* Gray-800 for code blocks */
+            color: #E5E7EB; /* Light text for code */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+            font-family: monospace;
+        }
+        #result-output h1, #result-output h2, #result-output h3 {
+            border-bottom: 2px solid #34D399;
+            padding-bottom: 0.5rem;
+            margin-top: 1.5rem;
+            font-weight: 600; /* Adjusted for better visibility */
+        }
+        #result-output li {
+            margin-left: 1.5rem;
+            list-style-type: disc;
+        }
+        /* 로딩 스피너 */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #34D399;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans min-h-screen p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-8">
+            <h1 class="text-3xl font-extrabold text-primary flex items-center">
+                <svg class="w-8 h-8 mr-2 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                Ollama Local Code Reviewer
+            </h1>
+            <p class="text-gray-600 mt-1">로컬 LLM을 사용하여 안전하게 코드를 분석합니다. (Node.js/Express)</p>
+        </header>
+
+        <!-- 입력 섹션 -->
+        <div class="bg-white p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">분석할 파일 경로 입력</h2>
+            <div class="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
+                <input
+                    id="file-paths-input"
+                    type="text"
+                    placeholder="분석할 파일 경로를 공백으로 구분하여 입력하세요 (예: src/app.js src/utils.js)"
+                    class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary transition duration-150"
+                >
+                <button
+                    id="analyze-button"
+                    class="px-6 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 transition duration-150 shadow-md flex items-center justify-center"
+                >
+                    <span id="button-text">코드 분석 요청</span>
+                    <div id="loading-spinner" class="spinner hidden ml-2"></div>
+                </button>
+            </div>
+            <p class="text-sm text-gray-500 mt-2">주의: 파일 경로는 서버(`server.js`)를 실행하는 디렉토리 기준으로 입력해야 합니다.</p>
+        </div>
+
+        <!-- 결과 출력 섹션 -->
+        <div class="bg-white p-6 rounded-xl shadow-lg min-h-[400px]">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-xl font-semibold text-gray-800">분석 결과</h2>
+                <button
+                    id="tts-button"
+                    class="px-3 py-1 bg-secondary text-gray-800 font-bold rounded-lg hover:bg-secondary/80 transition duration-150 shadow-sm hidden flex items-center text-sm"
+                    title="Gemini TTS로 분석 결과를 음성으로 듣습니다."
+                >
+                    <span id="tts-button-text">✨ 피드백 듣기</span>
+                    <div id="tts-loading-spinner" class="spinner hidden ml-2 w-4 h-4" style="border-top-color: #1E3A8A;"></div>
+                </button>
+            </div>
+            
+            <div id="initial-message" class="text-gray-500 text-center py-20">
+                <p>분석할 파일 경로를 입력하고 '코드 분석 요청' 버튼을 누르세요.</p>
+                <p class="mt-2 text-sm">Ollama 서버와 모델(gpt-oss:20b)이 실행 중인지 확인해 주세요.</p>
+            </div>
+            
+            <div id="result-output" class="hidden prose max-w-none">
+                <!-- LLM 결과가 마크다운으로 렌더링될 공간 -->
+            </div>
+            
+            <div id="error-message" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4">
+                <strong class="font-bold">오류 발생!</strong>
+                <span id="error-text" class="block sm:inline"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // -------------------------------------------------------------------
+        // Gemini API 설정 (TTS 기능용)
+        const apiKey = "";
+        const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+        // -------------------------------------------------------------------
+
+        const inputElement = document.getElementById('file-paths-input');
+        const analyzeButton = document.getElementById('analyze-button');
+        const buttonText = document.getElementById('button-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const ttsButton = document.getElementById('tts-button');
+        const ttsButtonText = document.getElementById('tts-button-text');
+        const ttsLoadingSpinner = document.getElementById('tts-loading-spinner');
+        const resultOutput = document.getElementById('result-output');
+        const initialMessage = document.getElementById('initial-message');
+        const errorMessage = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+
+        let currentAudio = null; // 현재 재생 중인 Audio 객체
+
+        analyzeButton.addEventListener('click', analyzeCode);
+        ttsButton.addEventListener('click', handleTts);
+
+        // WAV 변환 헬퍼 함수
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+        function pcmToWav(pcm16, sampleRate = 16000) {
+            const numChannels = 1;
+            const bytesPerSample = 2;
+            const buffer = new ArrayBuffer(44 + pcm16.byteLength);
+            const view = new DataView(buffer);
+
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + pcm16.byteLength, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+            view.setUint16(32, numChannels * bytesPerSample, true);
+            view.setUint16(34, bytesPerSample * 8, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, pcm16.byteLength, true);
+
+            let offset = 44;
+            for (let i = 0; i < pcm16.length; i++, offset += 2) {
+                view.setInt16(offset, pcm16[i], true);
+            }
+            return new Blob([view], { type: 'audio/wav' });
+        }
+        // -------------------------------------------------------------------
+
+
+        async function analyzeCode() {
+            const pathString = inputElement.value.trim();
+            const filePaths = pathString.split(/\s+/).filter(p => p.length > 0);
+
+            if (filePaths.length === 0) {
+                displayError("분석할 파일 경로를 입력해 주세요.");
+                return;
+            }
+
+            // UI 상태 업데이트: 로딩 시작
+            setLoadingState(true, analyzeButton, buttonText, loadingSpinner, '코드 분석 요청', '분석 중...');
+            resultOutput.classList.add('hidden');
+            initialMessage.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            ttsButton.classList.add('hidden'); // TTS 버튼 숨김
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filePaths })
+                });
+
+                if (currentAudio) {
+                    currentAudio.pause();
+                    currentAudio = null;
+                }
+
+                if (!response.ok) {
+                    const errorJson = await response.json();
+                    throw new Error(errorJson.error || `HTTP Error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Markdown을 HTML로 변환하여 출력
+                const htmlContent = marked.parse(data.result);
+                resultOutput.innerHTML = htmlContent;
+                resultOutput.classList.remove('hidden');
+                ttsButton.classList.remove('hidden'); // 분석 성공 시 TTS 버튼 표시
+
+            } catch (error) {
+                displayError(error.message);
+                console.error("Analysis failed:", error);
+            } finally {
+                // UI 상태 업데이트: 로딩 종료
+                setLoadingState(false, analyzeButton, buttonText, loadingSpinner, '코드 분석 요청', '분석 중...');
+            }
+        }
+        
+        async function handleTts() {
+            const textToSpeak = resultOutput.textContent;
+
+            // 이미 재생 중이라면 중지
+            if (currentAudio && !currentAudio.paused) {
+                currentAudio.pause();
+                currentAudio = null;
+                setLoadingState(false, ttsButton, ttsButtonText, ttsLoadingSpinner, '✨ 피드백 듣기', '음성 중지');
+                return;
+            }
+            
+            // TTS 로딩 시작
+            setLoadingState(true, ttsButton, ttsButtonText, ttsLoadingSpinner, '✨ 피드백 듣기', '음성 로딩 중...');
+
+            try {
+                const audioUrl = await callGeminiTTS(textToSpeak);
+                
+                // 오디오 재생
+                currentAudio = new Audio(audioUrl);
+                currentAudio.play();
+                
+                setLoadingState(false, ttsButton, ttsButtonText, ttsLoadingSpinner, '✨ 음성 중지', '음성 중지');
+
+                currentAudio.onended = () => {
+                    setLoadingState(false, ttsButton, ttsButtonText, ttsLoadingSpinner, '✨ 피드백 듣기', '음성 중지');
+                };
+
+            } catch (error) {
+                displayError("TTS 오류 발생: " + error.message);
+                setLoadingState(false, ttsButton, ttsButtonText, ttsLoadingSpinner, '✨ 피드백 듣기', '음성 중지');
+                console.error("TTS failed:", error);
+            }
+        }
+
+        async function callGeminiTTS(textToSpeak) {
+            const payload = {
+                contents: [{
+                    parts: [{ text: textToSpeak }]
+                }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: "Kore" } // 톤이 명확한 목소리 선택
+                        }
+                    }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+
+            const maxRetries = 3;
+            let lastError = null;
+            
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(TTS_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errorJson = await response.json();
+                        throw new Error(errorJson.error?.message || `TTS HTTP Error: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    const audioData = part?.inlineData?.data;
+                    const mimeType = part?.inlineData?.mimeType;
+
+                    if (audioData && mimeType && mimeType.startsWith("audio/L16")) {
+                        // L16은 Signed PCM 16-bit 오디오 데이터입니다.
+                        const pcmData = base64ToArrayBuffer(audioData);
+                        const pcm16 = new Int16Array(pcmData);
+                        
+                        // MimeType에서 sample rate 추출 (예: audio/L16;rate=16000)
+                        const rateMatch = mimeType.match(/rate=(\d+)/);
+                        const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 16000;
+
+                        const wavBlob = pcmToWav(pcm16, sampleRate);
+                        return URL.createObjectURL(wavBlob);
+                    } else {
+                        throw new Error("TTS 응답 형식 오류 또는 오디오 데이터 누락.");
+                    }
+
+                } catch (error) {
+                    lastError = error;
+                    // Exponential backoff
+                    const delay = Math.pow(2, i) * 1000;
+                    if (i < maxRetries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                }
+            }
+            throw new Error(`TTS API 호출 최종 실패: ${lastError ? lastError.message : '알 수 없는 오류'}`);
+        }
+
+        function setLoadingState(isLoading, button, textElement, spinner, defaultText, loadingText) {
+            button.disabled = isLoading;
+            if (isLoading) {
+                textElement.textContent = loadingText;
+                spinner.classList.remove('hidden');
+            } else {
+                 // 텍스트가 '음성 중지' 상태인 경우를 처리
+                if (textElement.textContent.includes('음성 중지') && defaultText.includes('듣기')) {
+                     textElement.textContent = defaultText;
+                } else if (textElement.textContent.includes('음성 로딩 중...')) {
+                     textElement.textContent = defaultText;
+                }
+                spinner.classList.add('hidden');
+            }
+        }
+        
+        function displayError(message) {
+            errorText.textContent = message;
+            errorMessage.classList.remove('hidden');
+            initialMessage.classList.add('hidden');
+            resultOutput.classList.add('hidden');
+            ttsButton.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>

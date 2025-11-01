@@ -1,0 +1,6 @@
+node_modules/
+data/
+package-lock.json
+package.json
+.env
+tip.md
