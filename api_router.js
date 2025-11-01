@@ -19,6 +19,7 @@ const TTS_API_BASE_URL =
 
 // ----------------------------------------------------------------------
 // 1. LLM API 호출 함수 (Ollama /api/generate 규격 및 파일 I/O 통합)
+//    - CODE_ANALYSIS 타입 시 다중 경로/코드 조각 처리 로직 강화
 // ----------------------------------------------------------------------
 async function callLlmModel(type, input) {
     let systemInstruction = "";
@@ -26,23 +27,45 @@ async function callLlmModel(type, input) {
 
     // 1. 요청 유형(type)에 따라 프롬프트 구성 및 파일 내용 로드
     if (type === "CODE_ANALYSIS") {
-        // 입력이 파일 경로일 수 있으므로, 파일 내용을 읽으려 시도합니다.
-        try {
-            // 입력된 경로를 절대 경로로 변환하여 파일 시스템에 접근합니다.
-            const fullPath = path.resolve(input.trim());
-            const fileContent = await fs.readFile(fullPath, "utf8");
+        let fileContents = [];
+        // 입력(input)을 줄바꿈 기준으로 분리하여 경로/코드 조각 리스트를 생성
+        const filePathsOrChunks = input
+            .split("\n")
+            .map((p) => p.trim())
+            .filter((p) => p.length > 0);
+        let successfulLoads = 0;
 
-            // 파일 내용을 프롬프트에 포함
-            userQuery = `분석할 파일: ${input}\n\n분석할 코드:\n\`\`\`\n${fileContent}\n\`\`\``;
-            console.log(`파일 ${input}의 내용을 성공적으로 로드했습니다.`);
-        } catch (error) {
-            // 파일 로드 실패 (파일 경로가 아니거나, 파일이 없거나)
-            // 입력된 텍스트 자체를 코드 조각으로 간주하고 분석합니다.
-            console.warn(
-                `파일 로드 실패: ${error.message}. 입력된 텍스트를 코드 조각으로 간주합니다.`
-            );
-            userQuery = `분석할 코드:\n\`\`\`\n${input}\n\`\`\``;
+        // 각 경로/코드 조각에 대해 처리
+        for (const p of filePathsOrChunks) {
+            try {
+                // 입력된 경로를 절대 경로로 변환하여 파일 시스템에 접근
+                const fullPath = path.resolve(p);
+                const fileContent = await fs.readFile(fullPath, "utf8");
+
+                // 파일 내용을 포맷하여 배열에 추가
+                fileContents.push(
+                    `### 파일: ${p}\n\n\`\`\`\n${fileContent}\n\`\`\``
+                );
+                successfulLoads++;
+            } catch (error) {
+                // 파일 로드 실패 (파일 경로가 아니거나, 파일이 없거나)
+                // 해당 입력 텍스트 자체를 코드 조각으로 간주하고 배열에 추가
+                fileContents.push(
+                    `### 코드 조각 (경로 오류 또는 직접 입력):\n\n\`\`\`\n${p}\n\`\`\``
+                );
+                console.warn(
+                    `파일 로드 실패: ${error.message}. 입력된 텍스트를 코드 조각으로 간주합니다.`
+                );
+            }
         }
+
+        // 최종 사용자 쿼리 구성
+        const analysisSubject =
+            successfulLoads === 0 && filePathsOrChunks.length === 1
+                ? `다음은 분석할 코드 조각입니다.`
+                : `다음은 분석할 ${successfulLoads}개의 파일 또는 코드 조각입니다.`;
+
+        userQuery = `${analysisSubject}\n\n${fileContents.join("\n\n---\n\n")}`;
 
         systemInstruction = `당신은 숙련된 코드 분석가입니다. 제공된 코드/파일을 검토하고 잠재적인 버그, 성능 문제, 보안 취약점, 그리고 개선할 구조적 부분을 명확하게 설명하세요. 응답은 **반드시 Markdown 형식으로만** 작성해야 합니다.`;
     } else if (type === "GENERAL_SEARCH") {
@@ -64,8 +87,6 @@ async function callLlmModel(type, input) {
     };
 
     try {
-        // 'node-fetch' 대신 fetch가 사용 가능하다고 가정하고, fetch()를 사용하거나,
-        // CommonJS 환경처럼 'node-fetch'를 임포트하여 사용합니다. (여기서는 import된 node-fetch 사용)
         const response = await fetch(OLLAMA_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -94,6 +115,7 @@ async function callLlmModel(type, input) {
 // ----------------------------------------------------------------------
 router.post("/query", async (req, res) => {
     try {
+        // 클라이언트는 type과 input을 담아 보냅니다.
         const { type, input } = req.body;
 
         // 필수 입력값 검증
@@ -135,12 +157,10 @@ router.post("/tts", async (req, res) => {
 
     // 1. API 키 누락 확인
     if (!GEMINI_API_KEY) {
-        return res
-            .status(500)
-            .json({
-                message: "TTS API Key is missing on the server.",
-                detail: "GEMINI_API_KEY 환경 변수가 설정되지 않았습니다. .env 파일을 확인하세요.",
-            });
+        return res.status(500).json({
+            message: "TTS API Key is missing on the server.",
+            detail: "GEMINI_API_KEY 환경 변수가 설정되지 않았습니다. .env 파일을 확인하세요.",
+        });
     }
     if (!text) {
         return res
@@ -166,7 +186,7 @@ router.post("/tts", async (req, res) => {
     };
 
     try {
-        // 2. API Key를 URL 쿼리 파라미터로 추가합니다. (오류 해결의 핵심)
+        // 2. API Key를 URL 쿼리 파라미터로 추가합니다.
         const apiUrl = `${TTS_API_BASE_URL}?key=${GEMINI_API_KEY}`;
 
         const response = await fetch(apiUrl, {
@@ -179,8 +199,10 @@ router.post("/tts", async (req, res) => {
 
         if (!response.ok) {
             console.error("Gemini API Error:", result);
+            // 클라이언트에 오류 상태 코드를 전달
             return res.status(response.status).json({
                 message: "Gemini TTS API 호출 실패.",
+                // 특히 권한 관련 오류 메시지를 포함하여 전달
                 detail:
                     result.error?.message || result.error || "Unknown error",
             });
@@ -209,4 +231,4 @@ router.post("/tts", async (req, res) => {
     }
 });
 
-export default router; // ESM default export
+export default router;
