@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ollama Local Code Reviewer (Web UI)</title>
-    <!-- Tailwind CSS 로드 -->
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -21,7 +21,7 @@
             }
         }
     </script>
-    <!-- Marked.js 로드 (Markdown to HTML 변환용) -->
+    <!-- Markdown Parser -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         /* Markdown 렌더링 스타일 */
@@ -34,16 +34,19 @@
             margin-top: 1rem;
             margin-bottom: 1rem;
             font-family: monospace;
+            white-space: pre-wrap; /* 코드 블록에서도 줄바꿈 허용 */
+            word-wrap: break-word;
         }
         #result-output h1, #result-output h2, #result-output h3 {
             border-bottom: 2px solid #34D399;
             padding-bottom: 0.5rem;
             margin-top: 1.5rem;
-            font-weight: 600; /* Adjusted for better visibility */
+            font-weight: 700;
         }
         #result-output li {
             margin-left: 1.5rem;
             list-style-type: disc;
+            margin-top: 0.5rem;
         }
         /* 로딩 스피너 */
         .spinner {
@@ -65,34 +68,54 @@
     <div class="max-w-6xl mx-auto">
         <header class="mb-8">
             <h1 class="text-3xl font-extrabold text-primary flex items-center">
-                <svg class="w-8 h-8 mr-2 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                <!-- SVG 아이콘 교체: Arc flag 오류를 수정하기 위해 안정적인 패스로 변경 -->
+                <svg class="w-8 h-8 mr-2 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <!-- '문서' 또는 '코드 파일'을 상징하는 새로운 패스 -->
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
                 Ollama Local Code Reviewer
             </h1>
-            <p class="text-gray-600 mt-1">로컬 LLM을 사용하여 안전하게 코드를 분석합니다. (Node.js/Express)</p>
+            <p class="text-gray-600 mt-1">로컬 LLM을 사용하여 안전하게 코드를 분석 및 검색합니다. (Node.js/Express)</p>
         </header>
 
-        <!-- 입력 섹션 -->
         <div class="bg-white p-6 rounded-xl shadow-lg mb-8">
-            <h2 class="text-xl font-semibold text-gray-800 mb-4">분석할 파일 경로 입력</h2>
-            <div class="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
-                <input
-                    id="file-paths-input"
-                    type="text"
-                    placeholder="분석할 파일 경로를 공백으로 구분하여 입력하세요 (예: src/app.js src/utils.js)"
-                    class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary transition duration-150"
-                >
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">분석 또는 검색 쿼리 입력</h2>
+            
+            <!-- 모드 선택 버튼 -->
+            <div class="flex space-x-2 mb-4">
                 <button
-                    id="analyze-button"
-                    class="px-6 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 transition duration-150 shadow-md flex items-center justify-center"
+                    id="mode-code-analysis"
+                    class="px-4 py-2 text-sm font-semibold rounded-full bg-primary text-white transition duration-150 shadow-md"
                 >
-                    <span id="button-text">코드 분석 요청</span>
-                    <div id="loading-spinner" class="spinner hidden ml-2"></div>
+                    💻 코드 분석
+                </button>
+                <button
+                    id="mode-general-search"
+                    class="px-4 py-2 text-sm font-semibold rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition duration-150 shadow-md"
+                >
+                    🌐 일반 검색
                 </button>
             </div>
-            <p class="text-sm text-gray-500 mt-2">주의: 파일 경로는 서버(`server.js`)를 실행하는 디렉토리 기준으로 입력해야 합니다.</p>
+            
+            <div class="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
+                <textarea
+                    id="query-input"
+                    placeholder="분석할 파일 경로를 줄바꿈으로 구분하여 입력하거나, 일반 검색어를 입력하세요."
+                    rows="4"
+                    class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary transition duration-150 resize-none"
+                ></textarea>
+                <button
+                    id="analyze-button"
+                    class="px-6 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 transition duration-150 shadow-md flex items-center justify-center h-full min-h-[50px] md:w-40"
+                >
+                    <span id="button-text">요청 전송</span> <div id="loading-spinner" class="spinner hidden ml-2"></div>
+                </button>
+            </div>
+            <p id="hint-text" class="text-sm text-gray-500 mt-2">
+                현재 모드: **코드 분석**. 파일 경로를 입력하면 서버의 `/analyze` API를 사용합니다.
+            </p>
         </div>
 
-        <!-- 결과 출력 섹션 -->
         <div class="bg-white p-6 rounded-xl shadow-lg min-h-[400px]">
             <div class="flex justify-between items-center mb-4 border-b pb-2">
                 <h2 class="text-xl font-semibold text-gray-800">분석 결과</h2>
@@ -107,13 +130,12 @@
             </div>
             
             <div id="initial-message" class="text-gray-500 text-center py-20">
-                <p>분석할 파일 경로를 입력하고 '코드 분석 요청' 버튼을 누르세요.</p>
+                <p>분석할 코드나 검색어를 입력하고 '요청 전송' 버튼을 누르세요.</p>
                 <p class="mt-2 text-sm">Ollama 서버와 모델(gpt-oss:20b)이 실행 중인지 확인해 주세요.</p>
             </div>
             
             <div id="result-output" class="hidden prose max-w-none">
-                <!-- LLM 결과가 마크다운으로 렌더링될 공간 -->
-            </div>
+                </div>
             
             <div id="error-message" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4">
                 <strong class="font-bold">오류 발생!</strong>
@@ -129,9 +151,10 @@
         const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
         // -------------------------------------------------------------------
 
-        const inputElement = document.getElementById('file-paths-input');
+        // DOM 요소 정의
+        const queryInputElement = document.getElementById('query-input'); 
         const analyzeButton = document.getElementById('analyze-button');
-        const buttonText = document.getElementById('button-text');
+        const buttonText = document.getElementById('button-text'); 
         const loadingSpinner = document.getElementById('loading-spinner');
         const ttsButton = document.getElementById('tts-button');
         const ttsButtonText = document.getElementById('tts-button-text');
@@ -139,14 +162,40 @@
         const resultOutput = document.getElementById('result-output');
         const initialMessage = document.getElementById('initial-message');
         const errorMessage = document.getElementById('error-message');
+        const hintText = document.getElementById('hint-text'); 
         const errorText = document.getElementById('error-text');
+        const codeAnalysisButton = document.getElementById('mode-code-analysis'); 
+        const generalSearchButton = document.getElementById('mode-general-search'); 
 
-        let currentAudio = null; // 현재 재생 중인 Audio 객체
+        let currentMode = 'CODE_ANALYSIS'; // 상태 변수 초기화
+        let currentAudio = null;
 
-        analyzeButton.addEventListener('click', analyzeCode);
+        analyzeButton.addEventListener('click', handleQuerySubmit);
         ttsButton.addEventListener('click', handleTts);
+        codeAnalysisButton.addEventListener('click', () => setMode('CODE_ANALYSIS'));
+        generalSearchButton.addEventListener('click', () => setMode('GENERAL_SEARCH'));
+        
+        // --- Enter 키 이벤트 핸들러 ---
+        queryInputElement.addEventListener('keydown', (e) => {
+            // Enter 키를 눌렀는지 확인
+            if (e.key === 'Enter') {
+                // Shift 키가 눌린 상태라면, 기본 동작(줄바꿈)을 허용하고 종료
+                if (e.shiftKey) {
+                    return;
+                }
+                
+                // Shift 키가 눌리지 않았다면, 기본 동작(줄바꿈)을 막고 요청 전송
+                e.preventDefault(); 
+                handleQuerySubmit();
+            }
+        });
+        // ------------------------------------------
+        
+        // 페이지 로드 시 초기 모드 설정
+        setMode(currentMode); 
 
-        // WAV 변환 헬퍼 함수
+        // -------------------------------------------------------------------
+        // TTS 헬퍼 함수 (PCM -> WAV 변환 로직)
         function writeString(view, offset, string) {
             for (let i = 0; i < string.length; i++) {
                 view.setUint8(offset + i, string.charCodeAt(i));
@@ -189,57 +238,120 @@
         }
         // -------------------------------------------------------------------
 
+        function setMode(newMode) {
+            currentMode = newMode;
+            
+            // UI 업데이트 로직
+            const isCodeAnalysis = newMode === 'CODE_ANALYSIS';
+            
+            // 버튼 스타일 업데이트
+            codeAnalysisButton.classList.toggle('bg-primary', isCodeAnalysis);
+            codeAnalysisButton.classList.toggle('text-white', isCodeAnalysis);
+            codeAnalysisButton.classList.toggle('bg-gray-200', !isCodeAnalysis);
+            codeAnalysisButton.classList.toggle('text-gray-700', !isCodeAnalysis);
+            
+            generalSearchButton.classList.toggle('bg-primary', !isCodeAnalysis);
+            generalSearchButton.classList.toggle('text-white', !isCodeAnalysis);
+            generalSearchButton.classList.toggle('bg-gray-200', isCodeAnalysis);
+            generalSearchButton.classList.toggle('text-gray-700', isCodeAnalysis);
+            
+            // 입력 필드 및 힌트 텍스트 업데이트
+            queryInputElement.placeholder = isCodeAnalysis 
+                ? "분석할 파일 경로를 줄바꿈으로 구분하여 입력하거나, 코드 내용을 붙여넣으세요." 
+                : "일반 검색어를 입력하세요.";
+            
+            hintText.innerHTML = `현재 모드: **${isCodeAnalysis ? '코드 분석' : '일반 검색'}**. ${isCodeAnalysis ? '서버의 `/analyze` API를 사용합니다.' : '서버의 `/api/llm/query` API를 사용합니다.'}`;
+            
+            // 버튼 텍스트 업데이트
+            buttonText.textContent = isCodeAnalysis ? '코드 분석' : '일반 검색';
+        }
 
-        async function analyzeCode() {
-            const pathString = inputElement.value.trim();
-            const filePaths = pathString.split(/\s+/).filter(p => p.length > 0);
+        async function handleQuerySubmit() {
+            const inputQuery = queryInputElement.value.trim();
 
-            if (filePaths.length === 0) {
-                displayError("분석할 파일 경로를 입력해 주세요.");
+            if (inputQuery.length === 0) {
+                displayError(`분석할 코드나 ${currentMode === 'CODE_ANALYSIS' ? '파일 경로' : '검색어'}를 입력해 주세요.`);
                 return;
             }
 
             // UI 상태 업데이트: 로딩 시작
-            setLoadingState(true, analyzeButton, buttonText, loadingSpinner, '코드 분석 요청', '분석 중...');
+            setLoadingState(true, analyzeButton, buttonText, loadingSpinner, '요청 전송', '분석 중...');
             resultOutput.classList.add('hidden');
             initialMessage.classList.add('hidden');
             errorMessage.classList.add('hidden');
-            ttsButton.classList.add('hidden'); // TTS 버튼 숨김
+            ttsButton.classList.add('hidden');
 
             try {
-                const response = await fetch('/analyze', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filePaths })
-                });
+                let response, url, payload;
+                
+                if (currentMode === 'CODE_ANALYSIS') {
+                    // CODE_ANALYSIS 모드: 파일 경로를 줄바꿈으로 파싱하여 /analyze 엔드포인트 호출
+                    const filePaths = inputQuery.split('\n')
+                                                .map(p => p.trim())
+                                                .filter(p => p.length > 0);
+                    
+                    if (filePaths.length === 0) {
+                         // 입력이 경로 없이 코드 자체일 경우, 배열에 담아 백엔드에서 처리하도록 함
+                         filePaths.push(inputQuery);
+                    }
+                    
+                    url = '/analyze'; // index.js에서 정의한 전용 라우트
+                    payload = { filePaths: filePaths };
 
+                } else {
+                    // GENERAL_SEARCH 모드: 일반 검색은 /api/llm/query 엔드포인트 호출
+                    url = '/api/llm/query';
+                    payload = { 
+                        type: 'GENERAL_SEARCH', // api_router.js에서 처리
+                        input: inputQuery  // 사용자 입력 쿼리
+                    };
+                }
+                
+                // 기존 오디오 중지
                 if (currentAudio) {
                     currentAudio.pause();
                     currentAudio = null;
                 }
+                
+                response = await fetch(url, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
 
                 if (!response.ok) {
                     const errorJson = await response.json();
-                    throw new Error(errorJson.error || `HTTP Error: ${response.status}`);
+                    const detail = errorJson.detail || errorJson.message || `HTTP Error: ${response.status}`;
+                    throw new Error(detail);
                 }
 
                 const data = await response.json();
                 
-                // Markdown을 HTML로 변환하여 출력
-                const htmlContent = marked.parse(data.result);
+                // LLM 결과 필드는 'result' (analyze 엔드포인트) 또는 'response' (llm/query 엔드포인트)
+                // 백엔드 index.js의 /analyze 라우트는 { result: analysisResult }를 반환함
+                const llmResponse = data.result || data.response; 
+
+                if (!llmResponse) {
+                    throw new Error("LLM 응답이 비어있습니다. Ollama 서버 상태를 확인하세요.");
+                }
+                
+                const htmlContent = marked.parse(llmResponse);
                 resultOutput.innerHTML = htmlContent;
                 resultOutput.classList.remove('hidden');
-                ttsButton.classList.remove('hidden'); // 분석 성공 시 TTS 버튼 표시
+                ttsButton.classList.remove('hidden');
 
             } catch (error) {
                 displayError(error.message);
-                console.error("Analysis failed:", error);
+                console.error("Query failed:", error);
             } finally {
                 // UI 상태 업데이트: 로딩 종료
-                setLoadingState(false, analyzeButton, buttonText, loadingSpinner, '코드 분석 요청', '분석 중...');
+                setLoadingState(false, analyzeButton, buttonText, loadingSpinner, '요청 전송', '분석 중...');
+                // 버튼 텍스트를 모드에 맞게 복원
+                buttonText.textContent = currentMode === 'CODE_ANALYSIS' ? '코드 분석' : '일반 검색';
             }
         }
         
+        // TTS 관련 함수
         async function handleTts() {
             const textToSpeak = resultOutput.textContent;
 
@@ -268,7 +380,20 @@
                 };
 
             } catch (error) {
-                displayError("TTS 오류 발생: " + error.message);
+                // 수정된 부분: 다양한 권한/키 오류 메시지를 포함하여 확인
+                const errorMessageString = error.message.toUpperCase();
+                const isAuthError = 
+                    errorMessageString.includes("403") || 
+                    errorMessageString.includes("API KEY IS MISSING") || 
+                    errorMessageString.includes("UNREGISTERED CALLERS") ||
+                    errorMessageString.includes("FORBIDDEN");
+
+                if (isAuthError) {
+                    displayError("TTS 기능은 **유료 결제** 또는 **활성화된 API 키**를 가진 사용자만 사용 가능합니다. 유효한 키와 결제 활성화를 확인하세요.");
+                } else {
+                    displayError("TTS 오류 발생: " + error.message);
+                }
+                
                 setLoadingState(false, ttsButton, ttsButtonText, ttsLoadingSpinner, '✨ 피드백 듣기', '음성 중지');
                 console.error("TTS failed:", error);
             }
@@ -303,6 +428,7 @@
 
                     if (!response.ok) {
                         const errorJson = await response.json();
+                        // 에러 메시지 전체를 유지하여 catch 블록으로 전달
                         throw new Error(errorJson.error?.message || `TTS HTTP Error: ${response.status}`);
                     }
                     
@@ -328,6 +454,11 @@
 
                 } catch (error) {
                     lastError = error;
+                    // 권한 관련 명시적인 오류는 재시도하지 않고 바로 throw
+                    if (error.message.toUpperCase().includes("403") || error.message.toUpperCase().includes("UNREGISTERED CALLERS")) {
+                         throw error;
+                    }
+                    
                     // Exponential backoff
                     const delay = Math.pow(2, i) * 1000;
                     if (i < maxRetries - 1) {
@@ -355,7 +486,7 @@
         }
         
         function displayError(message) {
-            errorText.textContent = message;
+            errorText.innerHTML = message; // HTML을 허용하여 **볼드체**를 표시
             errorMessage.classList.remove('hidden');
             initialMessage.classList.add('hidden');
             resultOutput.classList.add('hidden');
